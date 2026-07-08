@@ -1,0 +1,66 @@
+{
+  "title": "MeteoSwiss Custom",
+  "config": {
+    "step": {
+      "user": {
+        "title": "MeteoSwiss",
+        "description": "Configure an official MeteoSwiss Open Data location. Leave point and station empty to use the nearest official data sources.",
+        "data": {
+          "use_home_location": "Use Home Assistant location",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "point_id": "Forecast point ID",
+          "point_type_id": "Forecast point type ID",
+          "station_abbr": "SwissMetNet station code"
+        },
+        "data_description": {
+          "point_id": "Optional. The ID from ogd-local-forecasting_meta_point.csv.",
+          "point_type_id": "Optional. 1 = station, 2 = postal code, 3 = mountain point of interest.",
+          "station_abbr": "Optional. Example: GVE, PAY, LUG, ABO."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure MeteoSwiss",
+        "description": "Update the forecast point or observation station.",
+        "data": {
+          "use_home_location": "Use Home Assistant location",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "point_id": "Forecast point ID",
+          "point_type_id": "Forecast point type ID",
+          "station_abbr": "SwissMetNet station code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to fetch MeteoSwiss Open Data.",
+      "point_required": "A forecast point ID is required when a point type is set.",
+      "point_type_required": "A forecast point type is required when a point ID is set."
+    },
+    "abort": {
+      "already_configured": "This MeteoSwiss location is already configured.",
+      "reconfigure_successful": "MeteoSwiss configuration updated."
+    }
+  },
+  "entity": {
+    "weather": {
+      "weather": {
+        "name": "Weather"
+      }
+    },
+    "sensor": {
+      "temperature": { "name": "Temperature" },
+      "humidity": { "name": "Humidity" },
+      "dew_point": { "name": "Dew point" },
+      "precipitation_10_min": { "name": "Precipitation 10 min" },
+      "wind_speed": { "name": "Wind speed" },
+      "wind_gust": { "name": "Wind gust" },
+      "wind_bearing": { "name": "Wind bearing" },
+      "pressure_qfe": { "name": "Pressure QFE" },
+      "pressure_qnh": { "name": "Pressure QNH" },
+      "global_radiation": { "name": "Global radiation" },
+      "sunshine_duration": { "name": "Sunshine duration" }
+    }
+  }
+}
+
