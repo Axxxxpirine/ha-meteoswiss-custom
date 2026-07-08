@@ -1,0 +1,14 @@
+{
+  "domain": "meteoswiss_custom",
+  "name": "MeteoSwiss Custom",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/joey/ha-meteoswiss-custom",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/joey/ha-meteoswiss-custom/issues",
+  "quality_scale": "bronze",
+  "requirements": [],
+  "version": "0.1.0"
+}
+

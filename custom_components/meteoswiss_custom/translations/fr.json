@@ -1,0 +1,66 @@
+{
+  "title": "MeteoSwiss Custom",
+  "config": {
+    "step": {
+      "user": {
+        "title": "MétéoSuisse",
+        "description": "Configure une localisation basée sur les données Open Data officielles de MétéoSuisse. Laisse le point et la station vides pour utiliser les sources officielles les plus proches.",
+        "data": {
+          "use_home_location": "Utiliser la position Home Assistant",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "point_id": "ID du point de prévision",
+          "point_type_id": "Type du point de prévision",
+          "station_abbr": "Code de station SwissMetNet"
+        },
+        "data_description": {
+          "point_id": "Optionnel. ID issu de ogd-local-forecasting_meta_point.csv.",
+          "point_type_id": "Optionnel. 1 = station, 2 = code postal, 3 = point d'intérêt de montagne.",
+          "station_abbr": "Optionnel. Exemple : GVE, PAY, LUG, ABO."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurer MétéoSuisse",
+        "description": "Met à jour le point de prévision ou la station d'observation.",
+        "data": {
+          "use_home_location": "Utiliser la position Home Assistant",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "point_id": "ID du point de prévision",
+          "point_type_id": "Type du point de prévision",
+          "station_abbr": "Code de station SwissMetNet"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de récupérer les données Open Data de MétéoSuisse.",
+      "point_required": "Un ID de point est requis lorsqu'un type de point est défini.",
+      "point_type_required": "Un type de point est requis lorsqu'un ID de point est défini."
+    },
+    "abort": {
+      "already_configured": "Cette localisation MétéoSuisse est déjà configurée.",
+      "reconfigure_successful": "La configuration MétéoSuisse a été mise à jour."
+    }
+  },
+  "entity": {
+    "weather": {
+      "weather": {
+        "name": "Météo"
+      }
+    },
+    "sensor": {
+      "temperature": { "name": "Température" },
+      "humidity": { "name": "Humidité" },
+      "dew_point": { "name": "Point de rosée" },
+      "precipitation_10_min": { "name": "Précipitations 10 min" },
+      "wind_speed": { "name": "Vitesse du vent" },
+      "wind_gust": { "name": "Rafales" },
+      "wind_bearing": { "name": "Direction du vent" },
+      "pressure_qfe": { "name": "Pression QFE" },
+      "pressure_qnh": { "name": "Pression QNH" },
+      "global_radiation": { "name": "Rayonnement global" },
+      "sunshine_duration": { "name": "Durée d'ensoleillement" }
+    }
+  }
+}
+

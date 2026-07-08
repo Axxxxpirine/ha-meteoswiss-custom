@@ -1,0 +1,22 @@
+{
+  "entity": {
+    "sensor": {
+      "wind_bearing": {
+        "default": "mdi:compass"
+      },
+      "pressure_qfe": {
+        "default": "mdi:gauge"
+      },
+      "pressure_qnh": {
+        "default": "mdi:gauge"
+      },
+      "global_radiation": {
+        "default": "mdi:white-balance-sunny"
+      },
+      "sunshine_duration": {
+        "default": "mdi:weather-sunny"
+      }
+    }
+  }
+}
+
