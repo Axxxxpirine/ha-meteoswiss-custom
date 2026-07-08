@@ -169,12 +169,12 @@ def _schema(
             ): float,
             vol.Optional(
                 CONF_POINT_ID,
-                default=defaults.get(CONF_POINT_ID, ""),
-            ): vol.Any("", int),
+                default=str(defaults.get(CONF_POINT_ID, "") or ""),
+            ): str,
             vol.Optional(
                 CONF_POINT_TYPE_ID,
-                default=defaults.get(CONF_POINT_TYPE_ID, ""),
-            ): vol.Any("", int),
+                default=str(defaults.get(CONF_POINT_TYPE_ID, "") or ""),
+            ): str,
             vol.Optional(
                 CONF_STATION_ABBR,
                 default=defaults.get(CONF_STATION_ABBR, ""),
@@ -195,4 +195,3 @@ def _optional_str(value: Any) -> str | None:
     if value in (None, ""):
         return None
     return str(value).strip().upper()
-
