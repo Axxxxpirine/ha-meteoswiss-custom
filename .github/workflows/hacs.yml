@@ -13,4 +13,5 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
-
+          # Repository topics are configured in GitHub settings, not in Git.
+          ignore: topics
