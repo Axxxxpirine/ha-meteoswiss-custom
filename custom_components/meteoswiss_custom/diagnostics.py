@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from . import MeteoSwissRuntimeData
-from .const import ATTRIBUTION
+from .const import ATTRIBUTION, OBSERVATION_STALE_AFTER
 
 
 async def async_get_config_entry_diagnostics(
@@ -25,7 +26,8 @@ async def async_get_config_entry_diagnostics(
         },
     }
     if runtime_data is not None:
-        coordinator_data = runtime_data.coordinator.data
+        forecast_data = runtime_data.forecast_coordinator.data
+        observation = runtime_data.observation_coordinator.data
         data["resolved"] = {
             "forecast_point": {
                 "point_id": runtime_data.point.point_id,
@@ -42,13 +44,37 @@ async def async_get_config_entry_diagnostics(
             },
         }
         data["last_update"] = {
-            "success": runtime_data.coordinator.last_update_success,
-            "updated_at": coordinator_data.updated_at.isoformat()
-            if coordinator_data and coordinator_data.updated_at
+            "forecast_success": runtime_data.forecast_coordinator.last_update_success,
+            "forecast_updated_at": forecast_data.updated_at.isoformat()
+            if forecast_data and forecast_data.updated_at
             else None,
-            "hourly_forecasts": len(coordinator_data.hourly) if coordinator_data else 0,
-            "daily_forecasts": len(coordinator_data.daily) if coordinator_data else 0,
-            "has_observation": bool(coordinator_data and coordinator_data.observation),
+            "hourly_forecasts": len(forecast_data.hourly) if forecast_data else 0,
+            "daily_forecasts": len(forecast_data.daily) if forecast_data else 0,
+            "observation_success": (
+                runtime_data.observation_coordinator.last_update_success
+            ),
+            "observation_timestamp": observation.timestamp.isoformat()
+            if observation and observation.timestamp
+            else None,
+            "observation_age_minutes": _age_minutes(
+                observation.timestamp if observation else None
+            ),
+            "observation_stale": _is_stale(
+                observation.timestamp if observation else None
+            ),
         }
     return data
 
+
+def _age_minutes(timestamp: datetime | None) -> float | None:
+    """Return a non-negative timestamp age in minutes."""
+    if timestamp is None:
+        return None
+    return round(max(0.0, (datetime.now(UTC) - timestamp).total_seconds()) / 60, 1)
+
+
+def _is_stale(timestamp: datetime | None) -> bool | None:
+    """Return whether an observation is older than the grace threshold."""
+    if timestamp is None:
+        return None
+    return datetime.now(UTC) - timestamp > OBSERVATION_STALE_AFTER

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
@@ -14,6 +15,21 @@ from custom_components.meteoswiss_custom.client import (
     _parse_forecast_datetime,
     _parse_station_timestamp,
 )
+from custom_components.meteoswiss_custom.models import (
+    ForecastPoint,
+    Observation,
+    Station,
+)
+
+
+def _station() -> Station:
+    """Return a station used by observation tests."""
+    return Station(
+        abbr="TST",
+        name="Test station",
+        latitude=46.0,
+        longitude=7.0,
+    )
 
 
 def test_parse_forecast_datetime() -> None:
@@ -104,3 +120,92 @@ async def test_station_metadata_parsing() -> None:
     assert stations[0].name == "Adelboden"
     assert stations[0].canton == "BE"
 
+
+@pytest.mark.asyncio
+async def test_observation_backfills_recent_missing_value() -> None:
+    """A temporarily incomplete row reuses a recent value with its timestamp."""
+    client = MeteoSwissClient(cast(Any, object()))
+    client._async_get_text = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            "station_abbr;reference_timestamp;tre200s0;ure200s0\n"
+            "TST;15.07.2026 00:50;12.5;79\n"
+            "TST;15.07.2026 01:00;;80\n"
+        )
+    )
+
+    observation = await client.async_get_observation(_station())
+
+    assert observation is not None
+    assert observation.values["tre200s0"] == 12.5
+    assert observation.values["ure200s0"] == 80
+    assert observation.timestamp is not None
+    assert observation.timestamp.isoformat() == "2026-07-15T01:00:00+00:00"
+    temperature_timestamp = observation.timestamp_for("tre200s0")
+    assert temperature_timestamp is not None
+    assert temperature_timestamp.isoformat() == "2026-07-15T00:50:00+00:00"
+    humidity_timestamp = observation.timestamp_for("ure200s0")
+    assert humidity_timestamp is not None
+    assert humidity_timestamp.isoformat() == "2026-07-15T01:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_observation_does_not_backfill_old_value() -> None:
+    """Values older than the backfill window remain unavailable."""
+    client = MeteoSwissClient(cast(Any, object()))
+    client._async_get_text = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            "station_abbr;reference_timestamp;tre200s0;ure200s0\n"
+            "TST;15.07.2026 00:20;12.5;79\n"
+            "TST;15.07.2026 01:00;;80\n"
+        )
+    )
+
+    observation = await client.async_get_observation(_station())
+
+    assert observation is not None
+    assert observation.values["tre200s0"] is None
+    assert observation.values["ure200s0"] == 80
+
+
+@pytest.mark.asyncio
+async def test_forecast_fetch_does_not_request_observation() -> None:
+    """Forecast updates are independent from SwissMetNet observations."""
+    client = MeteoSwissClient(cast(Any, object()))
+    client._async_latest_item = AsyncMock(  # type: ignore[method-assign]
+        return_value={"properties": {"updated": "2026-07-15T01:00:00Z"}}
+    )
+    client._async_forecast_periods = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[[], []]
+    )
+    client.async_get_observation = AsyncMock()  # type: ignore[method-assign]
+    point = ForecastPoint(
+        point_id=1,
+        point_type_id=2,
+        name="Test point",
+        latitude=46.0,
+        longitude=7.0,
+    )
+
+    data = await client.async_get_forecast_data(point, _station())
+
+    assert data.observation is None
+    assert data.updated_at is not None
+    client.async_get_observation.assert_not_awaited()
+
+
+def test_observation_freshness_uses_value_timestamp() -> None:
+    """The grace window is based on the retained value's real timestamp."""
+    timestamp = datetime(2026, 7, 15, 1, 0, tzinfo=UTC)
+    observation = Observation(
+        station=_station(),
+        timestamp=timestamp,
+        values={"tre200s0": 12.5},
+        value_timestamps={"tre200s0": timestamp - timedelta(minutes=20)},
+    )
+
+    assert observation.is_fresh(
+        "tre200s0", timedelta(hours=1), now=timestamp + timedelta(minutes=39)
+    )
+    assert not observation.is_fresh(
+        "tre200s0", timedelta(hours=1), now=timestamp + timedelta(minutes=41)
+    )

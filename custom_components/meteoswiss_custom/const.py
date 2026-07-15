@@ -23,6 +23,10 @@ CONF_LATITUDE: Final = "latitude"
 CONF_LONGITUDE: Final = "longitude"
 
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(minutes=20)
+OBSERVATION_UPDATE_INTERVAL: Final = timedelta(minutes=10)
+OBSERVATION_BACKFILL_MAX_AGE: Final = timedelta(minutes=30)
+OBSERVATION_STALE_AFTER: Final = timedelta(minutes=30)
+OBSERVATION_MAX_AGE: Final = timedelta(hours=1)
 METADATA_UPDATE_INTERVAL: Final = timedelta(hours=24)
 
 STAC_API_BASE: Final = "https://data.geo.admin.ch/api/stac/v1"
@@ -69,4 +73,3 @@ ESSENTIAL_OBSERVATION_PARAMETERS: Final = (
     "gre000z0",
     "sre000z0",
 )
-

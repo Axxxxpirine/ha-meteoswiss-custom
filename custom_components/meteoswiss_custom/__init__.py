@@ -19,7 +19,10 @@ from .const import (
     CONF_STATION_NAME,
     PLATFORMS,
 )
-from .coordinator import MeteoSwissDataUpdateCoordinator
+from .coordinator import (
+    MeteoSwissDataUpdateCoordinator,
+    MeteoSwissObservationDataUpdateCoordinator,
+)
 from .models import ForecastPoint, Station
 
 
@@ -28,7 +31,8 @@ class MeteoSwissRuntimeData:
     """Runtime data for a config entry."""
 
     client: MeteoSwissClient
-    coordinator: MeteoSwissDataUpdateCoordinator
+    forecast_coordinator: MeteoSwissDataUpdateCoordinator
+    observation_coordinator: MeteoSwissObservationDataUpdateCoordinator
     point: ForecastPoint
     station: Station
 
@@ -51,12 +55,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         point_type_id=point_type_id,
         station_abbr=station_abbr,
     )
-    coordinator = MeteoSwissDataUpdateCoordinator(hass, client, point, station)
-    await coordinator.async_config_entry_first_refresh()
+    forecast_coordinator = MeteoSwissDataUpdateCoordinator(hass, client, point, station)
+    observation_coordinator = MeteoSwissObservationDataUpdateCoordinator(
+        hass, client, point, station
+    )
+    await forecast_coordinator.async_config_entry_first_refresh()
+    # Observation failures must not prevent the integration from loading. The
+    # independent coordinator will retry every ten minutes.
+    await observation_coordinator.async_refresh()
 
     entry.runtime_data = MeteoSwissRuntimeData(
         client=client,
-        coordinator=coordinator,
+        forecast_coordinator=forecast_coordinator,
+        observation_coordinator=observation_coordinator,
         point=point,
         station=station,
     )
