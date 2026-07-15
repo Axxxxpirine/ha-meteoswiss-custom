@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +44,33 @@ class Observation:
     station: Station
     timestamp: datetime | None
     values: dict[str, float | int | str | None]
+    value_timestamps: dict[str, datetime | None] = field(default_factory=dict)
+
+    def timestamp_for(self, parameter: str) -> datetime | None:
+        """Return the timestamp of a specific observation value."""
+        return self.value_timestamps.get(parameter, self.timestamp)
+
+    def age_for(
+        self, parameter: str, *, now: datetime | None = None
+    ) -> timedelta | None:
+        """Return a specific value's non-negative age."""
+        timestamp = self.timestamp_for(parameter)
+        if timestamp is None:
+            return None
+        return max(timedelta(0), (now or datetime.now(UTC)) - timestamp)
+
+    def is_fresh(
+        self,
+        parameter: str,
+        max_age: timedelta,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        """Return whether a present value is still inside its validity window."""
+        if self.values.get(parameter) is None:
+            return False
+        age = self.age_for(parameter, now=now)
+        return age is None or age <= max_age
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,4 +91,3 @@ class MeteoSwissData:
     hourly: list[ForecastPeriod] = field(default_factory=list)
     daily: list[ForecastPeriod] = field(default_factory=list)
     updated_at: datetime | None = None
-

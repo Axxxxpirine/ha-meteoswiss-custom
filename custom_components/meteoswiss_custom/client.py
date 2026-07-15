@@ -19,6 +19,7 @@ from .const import (
     HOURLY_FORECAST_PARAMETERS,
     LOCAL_FORECAST_COLLECTION,
     LOCAL_POINT_META_URL,
+    OBSERVATION_BACKFILL_MAX_AGE,
     SMN_ASSET_BASE,
     SMN_STATION_META_URL,
     STAC_API_BASE,
@@ -68,8 +69,7 @@ class MeteoSwissClient:
                 (
                     item
                     for item in points
-                    if item.point_id == point_id
-                    and item.point_type_id == point_type_id
+                    if item.point_id == point_id and item.point_type_id == point_type_id
                 ),
                 None,
             )
@@ -154,8 +154,20 @@ class MeteoSwissClient:
         self._stations = stations
         return stations
 
-    async def async_get_data(self, point: ForecastPoint, station: Station) -> MeteoSwissData:
+    async def async_get_data(
+        self, point: ForecastPoint, station: Station
+    ) -> MeteoSwissData:
         """Fetch current observations and forecasts."""
+        forecast_task = self.async_get_forecast_data(point, station)
+        observation_task = self.async_get_observation(station)
+        forecast, observation = await asyncio.gather(forecast_task, observation_task)
+        forecast.observation = observation
+        return forecast
+
+    async def async_get_forecast_data(
+        self, point: ForecastPoint, station: Station
+    ) -> MeteoSwissData:
+        """Fetch forecasts without coupling them to current observations."""
         item = await self._async_latest_item(LOCAL_FORECAST_COLLECTION)
         hourly_task = self._async_forecast_periods(
             item, HOURLY_FORECAST_PARAMETERS, point
@@ -163,17 +175,13 @@ class MeteoSwissClient:
         daily_task = self._async_forecast_periods(
             item, DAILY_FORECAST_PARAMETERS, point
         )
-        observation_task = self.async_get_observation(station)
-        hourly, daily, observation = await asyncio.gather(
-            hourly_task, daily_task, observation_task
-        )
+        hourly, daily = await asyncio.gather(hourly_task, daily_task)
         updated_raw = item.get("properties", {}).get("updated") or item.get(
             "properties", {}
         ).get("datetime")
         return MeteoSwissData(
             point=point,
             station=station,
-            observation=observation,
             hourly=hourly,
             daily=daily,
             updated_at=_parse_iso_datetime(updated_raw),
@@ -193,17 +201,43 @@ class MeteoSwissClient:
         if not rows:
             return None
 
-        row = rows[-1]
-        values: dict[str, float | int | str | None] = {}
-        for key, value in row.items():
-            if key in {"station_abbr", "reference_timestamp"}:
-                continue
-            values[key] = _number_or_text(value)
+        latest_row = rows[-1]
+        latest_timestamp = _parse_station_timestamp(
+            latest_row.get("reference_timestamp")
+        )
+        values: dict[str, float | int | str | None] = {
+            key: None
+            for key in latest_row
+            if key not in {"station_abbr", "reference_timestamp"}
+        }
+        value_timestamps: dict[str, datetime | None] = {}
+
+        # Newly published rows can be temporarily incomplete. Backfill only from
+        # recent rows and retain each value's true timestamp so Home Assistant can
+        # expose stale data instead of silently pretending it is current.
+        for row in reversed(rows):
+            row_timestamp = _parse_station_timestamp(row.get("reference_timestamp"))
+            if (
+                latest_timestamp is not None
+                and row_timestamp is not None
+                and latest_timestamp - row_timestamp > OBSERVATION_BACKFILL_MAX_AGE
+            ):
+                break
+            for key, raw_value in row.items():
+                if key in {"station_abbr", "reference_timestamp"}:
+                    continue
+                if values.get(key) is not None:
+                    continue
+                value = _number_or_text(raw_value)
+                if value is not None:
+                    values[key] = value
+                    value_timestamps[key] = row_timestamp
 
         return Observation(
             station=station,
-            timestamp=_parse_station_timestamp(row.get("reference_timestamp")),
+            timestamp=latest_timestamp,
             values=values,
+            value_timestamps=value_timestamps,
         )
 
     async def _async_forecast_periods(
@@ -297,7 +331,9 @@ class MeteoSwissClient:
                 return payload
         except (ClientError, ClientResponseError, TimeoutError) as err:
             if cached is not None:
-                _LOGGER.debug("Using cached MeteoSwiss payload for %s after %s", url, err)
+                _LOGGER.debug(
+                    "Using cached MeteoSwiss payload for %s after %s", url, err
+                )
                 return cached.payload
             raise MeteoSwissClientError(f"Unable to fetch {url}: {err}") from err
 

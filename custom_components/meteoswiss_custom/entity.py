@@ -6,10 +6,17 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import ATTRIBUTION, DOMAIN
-from .coordinator import MeteoSwissDataUpdateCoordinator
+from .coordinator import (
+    MeteoSwissDataUpdateCoordinator,
+    MeteoSwissObservationDataUpdateCoordinator,
+)
+
+MeteoSwissCoordinator = (
+    MeteoSwissDataUpdateCoordinator | MeteoSwissObservationDataUpdateCoordinator
+)
 
 
-class MeteoSwissEntity(CoordinatorEntity[MeteoSwissDataUpdateCoordinator]):
+class MeteoSwissEntity(CoordinatorEntity[MeteoSwissCoordinator]):
     """Base class for MeteoSwiss entities."""
 
     _attr_attribution = ATTRIBUTION

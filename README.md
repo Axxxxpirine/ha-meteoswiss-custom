@@ -45,9 +45,11 @@ Point type IDs:
 
 ## Data Update Behavior
 
-Home Assistant polls every 20 minutes. MeteoSwiss local forecasts are updated hourly; SwissMetNet 10-minute files are updated approximately every 10 minutes.
+Home Assistant polls forecasts every 20 minutes and SwissMetNet observations every 10 minutes. The two update paths are independent: a forecast download failure does not make observation sensors unavailable.
 
 The client uses conditional requests (`ETag` / `Last-Modified`) where the FSDI service provides them.
+
+New SwissMetNet rows can be temporarily incomplete. Missing values are backfilled from at most 30 minutes of recent official data. Sensors expose `reference_timestamp`, `data_age_minutes`, `stale` and `last_update_success` attributes; a retained value remains available for at most one hour.
 
 ## Known Limitations
 
@@ -66,4 +68,3 @@ ruff check .
 ```
 
 For full Home Assistant validation, run `hassfest` in a Home Assistant development environment.
-
