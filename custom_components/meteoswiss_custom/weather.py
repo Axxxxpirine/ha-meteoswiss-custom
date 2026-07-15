@@ -16,12 +16,15 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import MeteoSwissRuntimeData
-from .const import DOMAIN
-from .coordinator import MeteoSwissDataUpdateCoordinator
+from .const import DOMAIN, OBSERVATION_MAX_AGE
+from .coordinator import (
+    MeteoSwissDataUpdateCoordinator,
+    MeteoSwissObservationDataUpdateCoordinator,
+)
 from .entity import MeteoSwissEntity
 from .models import ForecastPeriod
 
@@ -33,7 +36,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up MeteoSwiss weather entity."""
     runtime_data: MeteoSwissRuntimeData = entry.runtime_data
-    async_add_entities([MeteoSwissWeather(runtime_data.coordinator)])
+    async_add_entities(
+        [
+            MeteoSwissWeather(
+                runtime_data.forecast_coordinator,
+                runtime_data.observation_coordinator,
+            )
+        ]
+    )
 
 
 class MeteoSwissWeather(MeteoSwissEntity, WeatherEntity):
@@ -48,58 +58,99 @@ class MeteoSwissWeather(MeteoSwissEntity, WeatherEntity):
     _attr_native_wind_speed_unit = UnitOfSpeed.KILOMETERS_PER_HOUR
     _attr_native_precipitation_unit = UnitOfLength.MILLIMETERS
 
-    def __init__(self, coordinator: MeteoSwissDataUpdateCoordinator) -> None:
+    def __init__(
+        self,
+        coordinator: MeteoSwissDataUpdateCoordinator,
+        observation_coordinator: MeteoSwissObservationDataUpdateCoordinator,
+    ) -> None:
         """Initialize the weather entity."""
         super().__init__(coordinator)
-        self._attr_unique_id = (
-            f"{DOMAIN}_{coordinator.point.point_type_id}_{coordinator.point.point_id}_weather"
+        self.observation_coordinator = observation_coordinator
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.point.point_type_id}_{coordinator.point.point_id}_weather"
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to current-condition updates as well as forecasts."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self.observation_coordinator.async_add_listener(
+                self._handle_observation_update
+            )
         )
+
+    @callback
+    def _handle_observation_update(self) -> None:
+        """Refresh the weather state after a SwissMetNet update."""
+        self.async_write_ha_state()
 
     @property
     def condition(self) -> str | None:
         """Return the current condition."""
         if self.coordinator.data.hourly:
-            return _condition_from_symbol(self.coordinator.data.hourly[0].values.get("jww003i0"))
+            return _condition_from_symbol(
+                self.coordinator.data.hourly[0].values.get("jww003i0")
+            )
         if self.coordinator.data.daily:
-            return _condition_from_symbol(self.coordinator.data.daily[0].values.get("jp2000d0"))
+            return _condition_from_symbol(
+                self.coordinator.data.daily[0].values.get("jp2000d0")
+            )
         return None
 
     @property
     def native_temperature(self) -> float | None:
         """Return native temperature."""
-        return _current_or_forecast(self.coordinator, "tre200s0", "tre200h0")
+        return _current_or_forecast(
+            self.coordinator,
+            self.observation_coordinator,
+            "tre200s0",
+            "tre200h0",
+        )
 
     @property
     def humidity(self) -> float | None:
         """Return current humidity."""
-        return _observation_value(self.coordinator, "ure200s0")
+        return _observation_value(self.observation_coordinator, "ure200s0")
 
     @property
     def native_dew_point(self) -> float | None:
         """Return dew point."""
-        return _observation_value(self.coordinator, "tde200s0")
+        return _observation_value(self.observation_coordinator, "tde200s0")
 
     @property
     def native_pressure(self) -> float | None:
         """Return current pressure."""
-        return _observation_value(self.coordinator, "pp0qnhs0") or _observation_value(
-            self.coordinator, "prestas0"
-        )
+        return _observation_value(
+            self.observation_coordinator, "pp0qnhs0"
+        ) or _observation_value(self.observation_coordinator, "prestas0")
 
     @property
     def native_wind_speed(self) -> float | None:
         """Return wind speed."""
-        return _current_or_forecast(self.coordinator, "fu3010z0", "fu3010h0")
+        return _current_or_forecast(
+            self.coordinator,
+            self.observation_coordinator,
+            "fu3010z0",
+            "fu3010h0",
+        )
 
     @property
     def native_wind_gust_speed(self) -> float | None:
         """Return wind gust speed."""
-        return _current_or_forecast(self.coordinator, "fu3010z1", "fu3010h1")
+        return _current_or_forecast(
+            self.coordinator,
+            self.observation_coordinator,
+            "fu3010z1",
+            "fu3010h1",
+        )
 
     @property
     def wind_bearing(self) -> float | None:
         """Return wind bearing."""
-        return _current_or_forecast(self.coordinator, "dkl010z0", "dkl010h0")
+        return _current_or_forecast(
+            self.coordinator,
+            self.observation_coordinator,
+            "dkl010z0",
+            "dkl010h0",
+        )
 
     async def async_forecast_hourly(self) -> list[Forecast] | None:
         """Return hourly forecast."""
@@ -140,22 +191,25 @@ def _daily_forecast(period: ForecastPeriod) -> Forecast:
 
 
 def _observation_value(
-    coordinator: MeteoSwissDataUpdateCoordinator, parameter: str
+    coordinator: MeteoSwissObservationDataUpdateCoordinator, parameter: str
 ) -> float | None:
     """Return an observation value as float if available."""
-    observation = coordinator.data.observation
+    observation = coordinator.data
     if observation is None:
+        return None
+    if not observation.is_fresh(parameter, OBSERVATION_MAX_AGE):
         return None
     return _as_float(observation.values.get(parameter))
 
 
 def _current_or_forecast(
     coordinator: MeteoSwissDataUpdateCoordinator,
+    observation_coordinator: MeteoSwissObservationDataUpdateCoordinator,
     observation_parameter: str,
     forecast_parameter: str,
 ) -> float | None:
     """Return current observation with forecast fallback."""
-    observed = _observation_value(coordinator, observation_parameter)
+    observed = _observation_value(observation_coordinator, observation_parameter)
     if observed is not None:
         return observed
     if not coordinator.data.hourly:
@@ -202,4 +256,3 @@ def _condition_from_symbol(value: Any) -> str | None:
     if symbol in {30, 31, 32}:
         return "fog"
     return "cloudy"
-

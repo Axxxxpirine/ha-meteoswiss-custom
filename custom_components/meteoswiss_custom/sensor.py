@@ -26,8 +26,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import MeteoSwissRuntimeData
-from .const import DOMAIN
-from .coordinator import MeteoSwissDataUpdateCoordinator
+from .const import DOMAIN, OBSERVATION_MAX_AGE, OBSERVATION_STALE_AFTER
+from .coordinator import MeteoSwissObservationDataUpdateCoordinator
 from .entity import MeteoSwissEntity
 
 
@@ -148,7 +148,8 @@ async def async_setup_entry(
     """Set up MeteoSwiss sensors."""
     runtime_data: MeteoSwissRuntimeData = entry.runtime_data
     async_add_entities(
-        MeteoSwissSensor(runtime_data.coordinator, description) for description in SENSORS
+        MeteoSwissSensor(runtime_data.observation_coordinator, description)
+        for description in SENSORS
     )
 
 
@@ -159,7 +160,7 @@ class MeteoSwissSensor(MeteoSwissEntity, SensorEntity):
 
     def __init__(
         self,
-        coordinator: MeteoSwissDataUpdateCoordinator,
+        coordinator: MeteoSwissObservationDataUpdateCoordinator,
         description: MeteoSwissSensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
@@ -172,30 +173,40 @@ class MeteoSwissSensor(MeteoSwissEntity, SensorEntity):
     @property
     def native_value(self) -> Any:
         """Return the native value."""
-        observation = self.coordinator.data.observation
+        observation = self.coordinator.data
         if observation is None:
             return None
         return observation.values.get(self.entity_description.parameter)
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
-        observation = self.coordinator.data.observation
-        return (
-            super().available
-            and observation is not None
-            and observation.values.get(self.entity_description.parameter) is not None
+        """Keep recent values available across short observation outages."""
+        observation = self.coordinator.data
+        return observation is not None and observation.is_fresh(
+            self.entity_description.parameter, OBSERVATION_MAX_AGE
         )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes."""
-        observation = self.coordinator.data.observation
+        observation = self.coordinator.data
+        timestamp = (
+            observation.timestamp_for(self.entity_description.parameter)
+            if observation
+            else None
+        )
+        age = (
+            observation.age_for(self.entity_description.parameter)
+            if observation
+            else None
+        )
         return {
             "station": self.coordinator.station.abbr,
             "station_name": self.coordinator.station.name,
-            "reference_timestamp": observation.timestamp.isoformat()
-            if observation and observation.timestamp
+            "reference_timestamp": timestamp.isoformat() if timestamp else None,
+            "data_age_minutes": round(age.total_seconds() / 60, 1)
+            if age is not None
             else None,
+            "stale": age is not None and age > OBSERVATION_STALE_AFTER,
+            "last_update_success": self.coordinator.last_update_success,
         }
-
